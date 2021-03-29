@@ -32,7 +32,6 @@ Func Main()
 		Exit 1
 	EndIf
 	$g_hLogfile = FileOpen($sLogfile, $FO_OVERWRITE)
-	$g_sSQliteDll = _SQLite_Startup()
 	_FileWriteLog($g_hLogfile, "Application was started")
 	$sUnprocessedFilesPath = _WinAPI_ExpandEnvironmentStrings(IniRead($sSettingsFile, $sSettingsSection, $sUnprocessedFilesPathKey, ""))
 	_FileWriteLog($g_hLogfile, $sUnprocessedFilesPathKey & "=" & $sUnprocessedFilesPath)
@@ -48,6 +47,7 @@ Func Main()
 		_FileWriteLog($g_hLogfile, "_WinAPI_CreateBuffer: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
 		Exit
 	EndIf
+	$g_sSQliteDll = _SQLite_Startup()
 	While 1
 		$aDirectoryChanges = _WinAPI_ReadDirectoryChanges($g_hDirectory, $FILE_NOTIFY_CHANGE_FILE_NAME, $g_pBuffer, $iBufferSize)
 		If @error Then
@@ -70,9 +70,9 @@ Func Main()
 EndFunc
 
 Func CleanUp()
+	_SQLite_Shutdown()
 	_WinAPI_FreeMemory($g_pBuffer)
 	_WinAPI_CloseHandle($g_hDirectory)
-	_SQLite_Shutdown()
 	_FileWriteLog($g_hLogfile, "Application is closed")
 	FileClose($g_hLogfile)
 EndFunc
