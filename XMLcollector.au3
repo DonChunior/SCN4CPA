@@ -47,6 +47,7 @@ Func Main()
 		_FileWriteLog($g_hLogfile, "_WinAPI_CreateBuffer: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
 		Exit
 	EndIf
+	CreateDirStructure($sXmlFilesDatabase)
 	$g_sSQliteDll = _SQLite_Startup()
 	While 1
 		$aDirectoryChanges = _WinAPI_ReadDirectoryChanges($g_hDirectory, $FILE_NOTIFY_CHANGE_FILE_NAME, $g_pBuffer, $iBufferSize)
@@ -75,4 +76,12 @@ Func CleanUp()
 	_WinAPI_CloseHandle($g_hDirectory)
 	_FileWriteLog($g_hLogfile, "Application is closed")
 	FileClose($g_hLogfile)
+EndFunc
+
+Func CreateDirStructure(Const ByRef $sPath)
+	Local $sDrive = "", $sDir = "", $sFileName = "", $sExtension = ""
+	_PathSplit($sPath, $sDrive, $sDir, $sFileName, $sExtension)
+	If Not FileExists($sDrive & $sDir) Then
+		DirCreate($sDrive & $sDir)
+	EndIf
 EndFunc
