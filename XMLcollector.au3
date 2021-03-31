@@ -1,87 +1,102 @@
 #AutoIt3Wrapper_AU3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w- 7
 
 #include <FileConstants.au3>
-#include <SQLite.au3>
-#include "SQLite.dll.au3"
 #include <File.au3>
 #include <WinAPI.au3>
 
 Opt("MustDeclareVars", 1)
 
 Global $g_hLogfile = 0
-Global $g_sSQliteDll = ""
 Global $g_hDirectory = 0
 Global $g_pBuffer = 0
 
 Main()
 
 Func Main()
-;~ 	Local Const $sLogfile = @TempDir & "\XMLcollector_" & @YEAR & @MON & @MDAY & "T" & @HOUR & @MIN & @SEC & ".log"
-	Local Const $sLogfile = @TempDir & "\XMLcollector.log"
+;~ 	Local Const $sLogfile = @LocalAppDataDir & "\SCN4CPA\SCN4CPA_" & @YEAR & @MON & @MDAY & "T" & @HOUR & @MIN & @SEC & ".log"
+	Local Const $sLogfile = @LocalAppDataDir & "\SCN4CPA\SCN4CPA.log"
 	Local Const $sSettingsFile = @ScriptDir & "\SCN4CPA.ini"
 	Local Const $sSettingsSection = "settings"
 	Local Const $sUnprocessedFilesPathKey = "unprocessed_files_path"
 	Local $sUnprocessedFilesPath = ""
-	Local Const $sXmlFilesDatabaseKey = "xml_files_database"
-	Local $sXmlFilesDatabase = ""
+	Local Const $sAlternativeScnKey = "alternative_scn"
+	Local $sAlternativeScn = ""
 	Local Const $iBufferSize = 8388608
 	Local $aDirectoryChanges = 0
-	Local Const $sXmlFileExtension = ".xml"
+	Local $asUniqueFileNames = 0
+;~ 	Local $iControlVariable = 0
 
 	If OnAutoItExitRegister("CleanUp") = 0 Then
 		Exit 1
 	EndIf
-	$g_hLogfile = FileOpen($sLogfile, $FO_OVERWRITE)
+	$g_hLogfile = FileOpen($sLogfile, $FO_OVERWRITE + $FO_CREATEPATH)
 	_FileWriteLog($g_hLogfile, "Application was started")
 	$sUnprocessedFilesPath = _WinAPI_ExpandEnvironmentStrings(IniRead($sSettingsFile, $sSettingsSection, $sUnprocessedFilesPathKey, ""))
 	_FileWriteLog($g_hLogfile, $sUnprocessedFilesPathKey & "=" & $sUnprocessedFilesPath)
-	$sXmlFilesDatabase = _WinAPI_ExpandEnvironmentStrings(IniRead($sSettingsFile, $sSettingsSection, $sXmlFilesDatabaseKey, ""))
-	_FileWriteLog($g_hLogfile, $sXmlFilesDatabaseKey & "=" & $sXmlFilesDatabase)
+	$sAlternativeScn = _WinAPI_ExpandEnvironmentStrings(IniRead($sSettingsFile, $sSettingsSection, $sAlternativeScnKey, ""))
+	_FileWriteLog($g_hLogfile, $sAlternativeScnKey & "=" & $sAlternativeScn)
 	$g_hDirectory = _WinAPI_CreateFileEx($sUnprocessedFilesPath, $OPEN_EXISTING, $FILE_LIST_DIRECTORY, $FILE_SHARE_ANY, $FILE_FLAG_BACKUP_SEMANTICS)
 	If @error Then
 		_FileWriteLog($g_hLogfile, "_WinAPI_CreateFileEx: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
-		Exit
+		Exit 1
 	EndIf
 	$g_pBuffer = _WinAPI_CreateBuffer($iBufferSize)
 	If @error Then
 		_FileWriteLog($g_hLogfile, "_WinAPI_CreateBuffer: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
-		Exit
+		Exit 1
 	EndIf
-	CreateDirStructure($sXmlFilesDatabase)
-	$g_sSQliteDll = _SQLite_Startup()
 	While 1
 		$aDirectoryChanges = _WinAPI_ReadDirectoryChanges($g_hDirectory, $FILE_NOTIFY_CHANGE_FILE_NAME, $g_pBuffer, $iBufferSize)
 		If @error Then
 			_FileWriteLog($g_hLogfile, "_WinAPI_ReadDirectoryChanges: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
-			Exit
+			Exit 1
 		EndIf
-		_SQLite_Open($sXmlFilesDatabase)
-		_SQLite_Exec(-1, "CREATE TABLE IF NOT EXISTS xml_files(file_name TEXT PRIMARY KEY ON CONFLICT REPLACE);")
-		For $i = 1 To $aDirectoryChanges[0][0]
-			If StringRight($aDirectoryChanges[$i][0], StringLen($sXmlFileExtension)) <> $sXmlFileExtension Or $aDirectoryChanges[$i][0] = "temp.xml" Then
-				ContinueLoop
-			EndIf
-			If $aDirectoryChanges[$i][1] <> $FILE_ACTION_ADDED And $aDirectoryChanges[$i][1] <> $FILE_ACTION_MODIFIED And $aDirectoryChanges[$i][1] <> $FILE_ACTION_RENAMED_NEW_NAME Then
-				ContinueLoop
-			EndIf
-			_SQLite_Exec(-1, "INSERT INTO xml_files (file_name) VALUES ('" & $aDirectoryChanges[$i][0] & "');")
-		Next
-		_SQLite_Close()
+		FilterDirectoryChanges($aDirectoryChanges)
+		If $aDirectoryChanges[0][0] Then
+			$asUniqueFileNames = _ArrayUnique($aDirectoryChanges, 0, 1, 0, $ARRAYUNIQUE_NOCOUNT)
+			_FileWriteFromArray($g_hLogfile, $asUniqueFileNames)
+		EndIf
+;~ 		$iControlVariable = 0
+;~ 		Do
+;~ 			If _WinAPI_FileInUse($sUnprocessedFilesPath &
+;~ 		Until UBound($aUniqueFileNames) = 0
+;~ 		For $i = 1 To $aDirectoryChanges[0][0]
+;~ 			If StringRight($aDirectoryChanges[$i][0], StringLen($sXmlFileExtension)) <> $sXmlFileExtension Or $aDirectoryChanges[$i][0] = "temp.xml" Or $aDirectoryChanges[$i][0] = "system_info.xml" Then
+;~ 				ContinueLoop
+;~ 			EndIf
+;~ 			If $aDirectoryChanges[$i][1] <> $FILE_ACTION_ADDED And $aDirectoryChanges[$i][1] <> $FILE_ACTION_MODIFIED And $aDirectoryChanges[$i][1] <> $FILE_ACTION_RENAMED_NEW_NAME Then
+;~ 				ContinueLoop
+;~ 			EndIf
+;~ 			_FileWriteLog($g_hLogfile, '"' & $aDirectoryChanges[$i][0] & '" added to database')
+;~ 		Next
 	WEnd
-EndFunc
+EndFunc   ;==>Main
 
 Func CleanUp()
-	_SQLite_Shutdown()
-	_WinAPI_FreeMemory($g_pBuffer)
-	_WinAPI_CloseHandle($g_hDirectory)
-	_FileWriteLog($g_hLogfile, "Application is closed")
-	FileClose($g_hLogfile)
-EndFunc
-
-Func CreateDirStructure(Const ByRef $sPath)
-	Local $sDrive = "", $sDir = "", $sFileName = "", $sExtension = ""
-	_PathSplit($sPath, $sDrive, $sDir, $sFileName, $sExtension)
-	If Not FileExists($sDrive & $sDir) Then
-		DirCreate($sDrive & $sDir)
+	If $g_pBuffer Then _WinAPI_FreeMemory($g_pBuffer)
+	If $g_hDirectory Then _WinAPI_CloseHandle($g_hDirectory)
+	If $g_hLogfile Then
+		_FileWriteLog($g_hLogfile, "Application is closed")
+		FileClose($g_hLogfile)
 	EndIf
-EndFunc
+EndFunc   ;==>CleanUp
+
+Func FilterDirectoryChanges(ByRef $aDirectoryChanges)
+	Local Const $sXmlFileExtension = ".xml"
+	Local $aiIndexesToDelete[1] = [0]
+
+	For $i = 1 To $aDirectoryChanges[0][0]
+		If StringRight($aDirectoryChanges[$i][0], StringLen($sXmlFileExtension)) <> $sXmlFileExtension _
+				Or $aDirectoryChanges[$i][0] = "temp.xml" _
+				Or $aDirectoryChanges[$i][0] = "system_info.xml" Then
+			$aiIndexesToDelete[0] = _ArrayAdd($aiIndexesToDelete, $i)
+		ElseIf $aDirectoryChanges[$i][1] <> $FILE_ACTION_ADDED _
+				And $aDirectoryChanges[$i][1] <> $FILE_ACTION_MODIFIED _
+				And $aDirectoryChanges[$i][1] <> $FILE_ACTION_RENAMED_NEW_NAME Then
+			$aiIndexesToDelete[0] = _ArrayAdd($aiIndexesToDelete, $i)
+		EndIf
+	Next
+	If $aiIndexesToDelete[0] Then
+		$aDirectoryChanges[0][0] = _ArrayDelete($aDirectoryChanges, $aiIndexesToDelete) - 1
+	EndIf
+EndFunc   ;==>FilterDirectoryChanges
