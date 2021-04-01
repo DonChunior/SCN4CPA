@@ -53,9 +53,10 @@ Func Main()
 			_FileWriteLog($g_hLogfile, "_WinAPI_ReadDirectoryChanges: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
 			Exit 1
 		EndIf
-		Sleep(1000)
+;~ 		Sleep(1000)
 		FilterDirectoryChanges($aDirectoryChanges)
 		If Not $aDirectoryChanges[0][0] Then ContinueLoop
+		_FileWriteFromArray($g_hLogfile, $aDirectoryChanges)
 		$asUniqueFileNames = _ArrayUnique($aDirectoryChanges, 0, 1, 0, $ARRAYUNIQUE_NOCOUNT)
 		For $sFileName In $asUniqueFileNames
 			If Not FileExists($sUnprocessedFilesPath & "\" & $sFileName) Then ContinueLoop
@@ -69,8 +70,12 @@ Func Main()
 			$aScnValues = _XML_GetValue($oXmlDoc, "//SCN")
 			If $aScnValues[1] = $sAlternativeScn Then ContinueLoop
 			_XML_UpdateField2($oXmlDoc, "//SCN", $sAlternativeScn)
-			_FileWriteLog($g_hLogfile, _XML_SaveToFile($oXmlDoc, $sUnprocessedFilesPath & "\" & $sFileName) & " " & $sFileName)
-;~ 			_FileWriteLog($g_hLogfile, $sFileName & ": " & )
+			FileDelete($sUnprocessedFilesPath & "\" & $sFileName)
+			_XML_SaveToFile($oXmlDoc, $sUnprocessedFilesPath & "\" & $sFileName)
+			If @error Then
+				_FileWriteLog($g_hLogfile, $sFileName & " @error = " & @error)
+			EndIf
+			_FileWriteLog($g_hLogfile, $sFileName & ": OK")
 		Next
 	WEnd
 EndFunc   ;==>Main
