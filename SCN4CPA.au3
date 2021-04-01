@@ -3,6 +3,7 @@
 #include <FileConstants.au3>
 #include <File.au3>
 #include <WinAPI.au3>
+#include <XML.au3>
 
 Opt("MustDeclareVars", 1)
 
@@ -24,7 +25,8 @@ Func Main()
 	Local Const $iBufferSize = 8388608
 	Local $aDirectoryChanges = 0
 	Local $asUniqueFileNames = 0
-;~ 	Local $iControlVariable = 0
+	Local $oXmlDoc = 0
+	Local $aScnValues = 0
 
 	If OnAutoItExitRegister("CleanUp") = 0 Then
 		Exit 1
@@ -51,24 +53,25 @@ Func Main()
 			_FileWriteLog($g_hLogfile, "_WinAPI_ReadDirectoryChanges: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
 			Exit 1
 		EndIf
+		Sleep(1000)
 		FilterDirectoryChanges($aDirectoryChanges)
-		If $aDirectoryChanges[0][0] Then
-			$asUniqueFileNames = _ArrayUnique($aDirectoryChanges, 0, 1, 0, $ARRAYUNIQUE_NOCOUNT)
-			_FileWriteFromArray($g_hLogfile, $asUniqueFileNames)
-		EndIf
-;~ 		$iControlVariable = 0
-;~ 		Do
-;~ 			If _WinAPI_FileInUse($sUnprocessedFilesPath &
-;~ 		Until UBound($aUniqueFileNames) = 0
-;~ 		For $i = 1 To $aDirectoryChanges[0][0]
-;~ 			If StringRight($aDirectoryChanges[$i][0], StringLen($sXmlFileExtension)) <> $sXmlFileExtension Or $aDirectoryChanges[$i][0] = "temp.xml" Or $aDirectoryChanges[$i][0] = "system_info.xml" Then
-;~ 				ContinueLoop
-;~ 			EndIf
-;~ 			If $aDirectoryChanges[$i][1] <> $FILE_ACTION_ADDED And $aDirectoryChanges[$i][1] <> $FILE_ACTION_MODIFIED And $aDirectoryChanges[$i][1] <> $FILE_ACTION_RENAMED_NEW_NAME Then
-;~ 				ContinueLoop
-;~ 			EndIf
-;~ 			_FileWriteLog($g_hLogfile, '"' & $aDirectoryChanges[$i][0] & '" added to database')
-;~ 		Next
+		If Not $aDirectoryChanges[0][0] Then ContinueLoop
+		$asUniqueFileNames = _ArrayUnique($aDirectoryChanges, 0, 1, 0, $ARRAYUNIQUE_NOCOUNT)
+		For $sFileName In $asUniqueFileNames
+			If Not FileExists($sUnprocessedFilesPath & "\" & $sFileName) Then ContinueLoop
+			While _WinAPI_FileInUse($sUnprocessedFilesPath & "\" & $sFileName)
+				Sleep(10)
+			WEnd
+			$oXmlDoc = _XML_CreateDOMDocument()
+			_XML_Load($oXmlDoc, $sUnprocessedFilesPath & "\" & $sFileName)
+			If @error Then ContinueLoop
+			If Not _XML_NodeExists($oXmlDoc, "//SCN") Then ContinueLoop
+			$aScnValues = _XML_GetValue($oXmlDoc, "//SCN")
+			If $aScnValues[1] = $sAlternativeScn Then ContinueLoop
+			_XML_UpdateField2($oXmlDoc, "//SCN", $sAlternativeScn)
+			_FileWriteLog($g_hLogfile, _XML_SaveToFile($oXmlDoc, $sUnprocessedFilesPath & "\" & $sFileName) & " " & $sFileName)
+;~ 			_FileWriteLog($g_hLogfile, $sFileName & ": " & )
+		Next
 	WEnd
 EndFunc   ;==>Main
 
