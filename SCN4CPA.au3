@@ -37,6 +37,9 @@ Func Main()
 	_FileWriteLog($g_hLogfile, $sUnprocessedFilesPathKey & "=" & $sUnprocessedFilesPath)
 	$sAlternativeScn = _WinAPI_ExpandEnvironmentStrings(IniRead($sSettingsFile, $sSettingsSection, $sAlternativeScnKey, ""))
 	_FileWriteLog($g_hLogfile, $sAlternativeScnKey & "=" & $sAlternativeScn)
+	While Not FileExists($sUnprocessedFilesPath)
+		Sleep(10)
+	WEnd
 	$g_hDirectory = _WinAPI_CreateFileEx($sUnprocessedFilesPath, $OPEN_EXISTING, $FILE_LIST_DIRECTORY, $FILE_SHARE_ANY, $FILE_FLAG_BACKUP_SEMANTICS)
 	If @error Then
 		_FileWriteLog($g_hLogfile, "_WinAPI_CreateFileEx: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
@@ -53,10 +56,10 @@ Func Main()
 			_FileWriteLog($g_hLogfile, "_WinAPI_ReadDirectoryChanges: " & _WinAPI_GetLastError() & " - " & _WinAPI_GetLastErrorMessage())
 			Exit 1
 		EndIf
-;~ 		Sleep(1000)
 		FilterDirectoryChanges($aDirectoryChanges)
 		If Not $aDirectoryChanges[0][0] Then ContinueLoop
-		_FileWriteFromArray($g_hLogfile, $aDirectoryChanges)
+		Sleep(5000)
+_FileWriteFromArray($g_hLogfile, $aDirectoryChanges)
 		$asUniqueFileNames = _ArrayUnique($aDirectoryChanges, 0, 1, 0, $ARRAYUNIQUE_NOCOUNT)
 		For $sFileName In $asUniqueFileNames
 			If Not FileExists($sUnprocessedFilesPath & "\" & $sFileName) Then ContinueLoop
@@ -65,17 +68,26 @@ Func Main()
 			WEnd
 			$oXmlDoc = _XML_CreateDOMDocument()
 			_XML_Load($oXmlDoc, $sUnprocessedFilesPath & "\" & $sFileName)
-			If @error Then ContinueLoop
+			If @error Then
+				_FileWriteLog($g_hLogfile, $sFileName & " _XML_Load: @error = " & @error)
+				ContinueLoop
+			EndIf
 			If Not _XML_NodeExists($oXmlDoc, "//SCN") Then ContinueLoop
 			$aScnValues = _XML_GetValue($oXmlDoc, "//SCN")
 			If $aScnValues[1] = $sAlternativeScn Then ContinueLoop
 			_XML_UpdateField2($oXmlDoc, "//SCN", $sAlternativeScn)
+			If @error Then
+				_FileWriteLog($g_hLogfile, $sFileName & " _XML_UpdateField2: @error = " & @error)
+				ContinueLoop
+			EndIf
+			If Not FileExists($sUnprocessedFilesPath & "\" & $sFileName) Then ContinueLoop
 			FileDelete($sUnprocessedFilesPath & "\" & $sFileName)
 			_XML_SaveToFile($oXmlDoc, $sUnprocessedFilesPath & "\" & $sFileName)
 			If @error Then
-				_FileWriteLog($g_hLogfile, $sFileName & " @error = " & @error)
+				_FileWriteLog($g_hLogfile, $sFileName & " _XML_SaveToFile @error = " & @error)
+				ContinueLoop
 			EndIf
-			_FileWriteLog($g_hLogfile, $sFileName & ": OK")
+			_FileWriteLog($g_hLogfile, "SCN changed in " & $sFileName & " file")
 		Next
 	WEnd
 EndFunc   ;==>Main
@@ -95,8 +107,7 @@ Func FilterDirectoryChanges(ByRef $aDirectoryChanges)
 
 	For $i = 1 To $aDirectoryChanges[0][0]
 		If StringRight($aDirectoryChanges[$i][0], StringLen($sXmlFileExtension)) <> $sXmlFileExtension _
-				Or $aDirectoryChanges[$i][0] = "temp.xml" _
-				Or $aDirectoryChanges[$i][0] = "system_info.xml" Then
+				Or $aDirectoryChanges[$i][0] = "temp.xml" Then
 			$aiIndexesToDelete[0] = _ArrayAdd($aiIndexesToDelete, $i)
 		ElseIf $aDirectoryChanges[$i][1] <> $FILE_ACTION_ADDED _
 				And $aDirectoryChanges[$i][1] <> $FILE_ACTION_MODIFIED _
